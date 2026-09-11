@@ -1,6 +1,59 @@
 jCardSim (Official repo of the [jCardSim](http://jcardsim.org) project)
 ========
 
+## relux-works fork
+
+This repository publishes `works.relux:jcardsim:3.0.5.9-relux.1`, a fork of
+[ph4r05/jcardsim](https://github.com/ph4r05/jcardsim) 3.0.5.9
+(base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with two
+patches on top:
+
+1. **externalAccess parity for MessageDigest/Cipher factories.** `MessageDigestProxy`
+   and `CipherProxy` unconditionally threw `CryptoException.NO_SUCH_ALGORITHM` when
+   `externalAccess=true`, while `Signature`/`KeyAgreement` never had that gate. The
+   gate is removed so all four factories behave the same. Verified with `javap` on
+   the built jar: `MessageDigest.getInstance(byte, boolean)` now directly constructs
+   `MessageDigestImpl` regardless of the boolean argument — see
+   `RELEASE-NOTES-3.0.5.9-relux.1.md`.
+2. **AES-GCM / AES-CTR engines over BouncyCastle.** Adds `AEADCipherImpl` (AES-GCM,
+   over BC's `GCMBlockCipher`) and `AESCTRCipherImpl` (AES-CTR, over BC's
+   `AESEngine` with an explicit 128-bit counter), wired into `CipherProxy`. See
+   `RELEASE-NOTES-3.0.5.9-relux.1.md` for the JC 3.0.5 `AEADCipher` contract notes
+   and stated bounds (AAD re-init behavior, `CIPHER_AES_ECB` reported for CTR,
+   8-arg init tag-size deviation).
+
+A PR carrying only these two patches (no coordinate change) is open/planned against
+upstream `ph4r05/jcardsim`.
+
+### Consumer coordinate
+
+```xml
+<dependency>
+    <groupId>works.relux</groupId>
+    <artifactId>jcardsim</artifactId>
+    <version>3.0.5.9-relux.1</version>
+</dependency>
+```
+
+### Building / installing locally
+
+This fork depends on `oracle.javacard:api_classic:3.0.5`, which is not published to
+any public Maven repository — it comes from the Java Card 3.0.5u4 Classic Edition
+SDK kit. One-time setup: point `JC_CLASSIC_HOME` at an unpacked JC 3.0.5u4 kit
+(the directory containing `lib/api_classic.jar`). The build's `initialize` phase
+runs `install-file` against `${JC_CLASSIC_HOME}/lib/api_classic.jar` automatically
+on every `mvn` invocation, so no separate manual step is required once the kit is
+available and the environment variable is exported:
+
+```bash
+export JC_CLASSIC_HOME=/path/to/jc305u4_kit
+mvn -q test
+mvn -q -DskipTests install
+```
+
+`mvn -q -DskipTests install` produces
+`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.1/jcardsim-3.0.5.9-relux.1.jar`.
+
 ### Congratulations! jCardSim has won [Duke's Choice 2013 Award](https://www.java.net/dukeschoice/2013)!
 
 ![alt text](https://licelus.com/wp-content/uploads/DCA2013_Badge_Winner.jpg "jCardSim is a winner of Duke's Choice 2013")

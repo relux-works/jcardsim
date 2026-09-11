@@ -5,6 +5,35 @@
 
 ## 2026-09-12
 
+### 0245 — Release 3.0.5.9-relux.1 prepared (TASK-260912-2p0myf)
+- MILESTONE: `pom.xml` recoordinated to `works.relux:jcardsim:3.0.5.9-relux.1` over base ph4r05/jcardsim `8414703` + patch `4aae917` (externalAccess parity for MessageDigest/Cipher factories) + patch `10d8d06` (AES-GCM/AES-CTR over BouncyCastle 1.46).
+- EVIDENCE: `mvn -q test` 165/165 green exit 0; `mvn -q -DskipTests install` produced `target/jcardsim-3.0.5.9-relux.1.jar` and the matching `~/.m2` copy.
+- SCOPE: README fork section and `RELEASE-NOTES-3.0.5.9-relux.1.md` added with javap evidence (`MessageDigest.getInstance` ignores the `externalAccess` boolean; `AEADCipherImpl`/`AESCTRCipherImpl` class shape).
+- STATUS: upstream PR body and orchestrator land/tag/release/PR command list prepared as outcome resources; producer did not execute any push/tag/release/PR — that is explicitly the orchestrator's step. Candidate left uncommitted in the Story worktree per handoff contract.
+
+### 0310 — CR rev1 F1 fixed: jar build made reproducible (TASK-260912-2p0myf)
+- ROOT CAUSE (review RUN-260911-9aa037, F1): the sha256 quoted in RELEASE-NOTES rev1
+  (`ae2a4f36...`) was not reproducible — two independent `mvn -q -DskipTests install` rebuilds of
+  the same tree produced two different hashes, neither matching the recorded one. `maven-shade-plugin`
+  was pinned at `1.7`, which predates Reproducible Builds support (needs >= 3.2.2), and no
+  `project.build.outputTimestamp` was set, so per-entry zip/jar timestamps varied build to build.
+- FIX: pinned `project.build.outputTimestamp` to `2019-12-16T00:00:00Z` (base 3.0.5.9 release
+  date); bumped `maven-shade-plugin` 1.7 -> 3.5.1 and pinned `maven-jar-plugin` explicitly at 3.5.0
+  (already the default-bound version under this Maven, so no behavior change there, just
+  reproducibility guarantee made explicit).
+- EVIDENCE: two consecutive `mvn -q clean` + `mvn -q -DskipTests install` cycles from the same
+  source tree, JDK 17, `JC_CLASSIC_HOME=/private/tmp/jc_classic_home`, produced byte-identical
+  jars: `target/jcardsim-3.0.5.9-relux.1.jar` sha256
+  `fd6e1289d0a337c5ac1dc9624bc46cf8717bd162228d8d801ada9615ba3d122a` both times, matching the
+  `~/.m2` install copy. The `-android` shaded jar was checked the same way and is also
+  reproducible: `987826822cda0ddf6db57962b3337b36f53eb4db7e4902a4f38f52f196d6681d` both times.
+  `mvn -q test` reran green 165/165 on the first try this time (no flake hit; BUG-260912-1ispot
+  remains a disclosed known flake from the CR rev1 evidence, not reproduced here).
+- SCOPE: RELEASE-NOTES-3.0.5.9-relux.1.md updated with the reproducible hash and the
+  outputTimestamp/plugin-version rationale; orchestrator-commands outcome updated so the release
+  step verifies the rebuilt jar's sha256 against RELEASE-NOTES before `gh release create` and
+  fails closed on mismatch instead of trusting a hardcoded value.
+
 ### 0219 — CTR doFinal reuse fixed after CR rev3 (TASK-260912-yxkqq2)
 - ROOT CAUSE (review RUN-260911-e75515, F1): `AESCTRCipherImpl.doFinal` set `isInitialized=false`, so any second `doFinal`/`update` on the same instance threw `INVALID_INIT`, contradicting the `Cipher.doFinal` contract (object resets to its initialized state for further processing).
 - FIX: `doFinal` now restores `counter` from a saved `initialCounter` snapshot and resets `keyStreamOffset` to `BLOCK_SIZE` instead of clearing `isInitialized`, mirroring `AEADCipherImpl.resetState`.
