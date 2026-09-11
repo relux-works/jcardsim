@@ -39,9 +39,6 @@ public class MessageDigestProxy {
      */
     public static final MessageDigest getInstance(byte algorithm, boolean externalAccess)
     throws CryptoException {
-        if (externalAccess) {
-            CryptoException.throwIt(CryptoException.NO_SUCH_ALGORITHM);
-        }
         MessageDigest instance = new MessageDigestImpl(algorithm);
         return instance;
     }
@@ -64,9 +61,6 @@ public class MessageDigestProxy {
      */
     public static final InitializedMessageDigest getInitializedMessageDigestInstance(byte algorithm,
             boolean externalAccess) throws CryptoException {
-        if (externalAccess) {
-            CryptoException.throwIt(CryptoException.NO_SUCH_ALGORITHM);
-        }
         InitializedMessageDigest instance = new MessageDigestImpl(algorithm);
         return instance;
     }
