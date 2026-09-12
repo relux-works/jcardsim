@@ -3,6 +3,15 @@
 > Institutional memory. Concise, factual, high-signal.
 > Newest entries first. One block per insight.
 
+## 2026-09-13
+
+### 1415 — KeyAgreementImplTest random AIOOBE: EC private scalar written variable-length (BUG-260912-1ispot)
+- ROOT CAUSE: `ByteContainer.setBytes` allocates `data` on the first write and never grows it (`ByteContainer.java:108`). `KeyPair.genKeyPair()` reuses the same `ECPrivateKeyImpl` and `KeyAgreementImplTest.testGenerateSecret` calls it twice per KeyPair; a first random scalar with a leading zero byte (~1/256 per FP key) sized the container short, the next full-length scalar overflowed in `Util.arrayCopy`. NOT the 33-byte sign byte named in the bug — `setBigInteger` already strips it.
+- FIX: `ECPrivateKeyImpl.setParameters` writes `asUnsignedByteArray((size+7)/8, d)` — left-padded fixed field length. BC 1.46 lacks the `(int, BigInteger)` overload (javap-verified), so a package-private helper does it and refuses a wider scalar.
+- FINDING: `getS()` now returns the field length always (32 for P-256, 15 for sect113r1; previously 14 for sect113r1 because the BC generator produced <2^112 scalars).
+- EVIDENCE: `ECPrivateKeyImplScalarLengthTest` (3 tests). Mutant A raw `setBigInteger(d)` reproduces the exact flake stack (AIOOBE `byte[1]`); narrowing mutant B (`new byte[raw.length]`) killed by 2 tests. `mvn -q test` 169/169 exit 0; KeyAgreementImplTest x10 all exit 0.
+- NOTE: 12-run random reproduction on the unpatched tree did not fire (~4%/run); regression is deterministic instead.
+
 ## 2026-09-12
 
 ### 0245 — Release 3.0.5.9-relux.1 prepared (TASK-260912-2p0myf)
