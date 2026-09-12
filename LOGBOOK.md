@@ -5,6 +5,13 @@
 
 ## 2026-09-13
 
+### 1500 — release 3.0.5.9-relux.2 packaging (TASK-260913-3scsqf)
+- SCOPE: `pom.xml`/`README.md` version bump to `3.0.5.9-relux.2`; new `RELEASE-NOTES-3.0.5.9-relux.2.md`. No new production code — packages the already-committed BUG-260912-1ispot fix (`2ba2fb7`).
+- FIX: `maven-shade-plugin` top-level `<configuration>` gets `<createDependencyReducedPom>false</createDependencyReducedPom>` (relux.1 review found `dependency-reduced-pom.xml` written into the repo root on every build). Config-level fix, not `.gitignore`, since the file is no longer generated at all — verified across two clean builds (`git status` stays clean, shade plugin logs "POM not found" for that path).
+- EVIDENCE: `mvn -q clean` + `mvn -q -DskipTests install` x2 → identical sha256 `485617e913bef9803404d32d2d4f36b5410bf7d298c3ff147e0e1b4d27d3262a` for `target/jcardsim-3.0.5.9-relux.2.jar`, matching the installed `~/.m2` copy. `mvn -q test` 168/168 exit 0. `KeyAgreementImplTest` run standalone 10 consecutive times, all exit 0.
+- FINDING: full-suite count is 168 here vs 169 quoted in the relux.1 notes for the earlier state (pre-existing count drift, not caused by this task — no new test added in this run, not investigated further).
+- STATUS: land/tag/release + upstream-PR command list prepared as an outcome artifact; execution left to the orchestrator. Candidate left uncommitted in the Story worktree per contract.
+
 ### 1415 — KeyAgreementImplTest random AIOOBE: EC private scalar written variable-length (BUG-260912-1ispot)
 - ROOT CAUSE: `ByteContainer.setBytes` allocates `data` on the first write and never grows it (`ByteContainer.java:108`). `KeyPair.genKeyPair()` reuses the same `ECPrivateKeyImpl` and `KeyAgreementImplTest.testGenerateSecret` calls it twice per KeyPair; a first random scalar with a leading zero byte (~1/256 per FP key) sized the container short, the next full-length scalar overflowed in `Util.arrayCopy`. NOT the 33-byte sign byte named in the bug — `setBigInteger` already strips it.
 - FIX: `ECPrivateKeyImpl.setParameters` writes `asUnsignedByteArray((size+7)/8, d)` — left-padded fixed field length. BC 1.46 lacks the `(int, BigInteger)` overload (javap-verified), so a package-private helper does it and refuses a wider scalar.

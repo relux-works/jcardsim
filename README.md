@@ -3,7 +3,7 @@ jCardSim (Official repo of the [jCardSim](http://jcardsim.org) project)
 
 ## relux-works fork
 
-This repository publishes `works.relux:jcardsim:3.0.5.9-relux.1`, a fork of
+This repository publishes `works.relux:jcardsim:3.0.5.9-relux.2`, a fork of
 [ph4r05/jcardsim](https://github.com/ph4r05/jcardsim) 3.0.5.9
 (base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with two
 patches on top:
@@ -14,11 +14,11 @@ patches on top:
    gate is removed so all four factories behave the same. Verified with `javap` on
    the built jar: `MessageDigest.getInstance(byte, boolean)` now directly constructs
    `MessageDigestImpl` regardless of the boolean argument — see
-   `RELEASE-NOTES-3.0.5.9-relux.1.md`.
+   `RELEASE-NOTES-3.0.5.9-relux.2.md`.
 2. **AES-GCM / AES-CTR engines over BouncyCastle.** Adds `AEADCipherImpl` (AES-GCM,
    over BC's `GCMBlockCipher`) and `AESCTRCipherImpl` (AES-CTR, over BC's
    `AESEngine` with an explicit 128-bit counter), wired into `CipherProxy`. See
-   `RELEASE-NOTES-3.0.5.9-relux.1.md` for the JC 3.0.5 `AEADCipher` contract notes
+   `RELEASE-NOTES-3.0.5.9-relux.2.md` for the JC 3.0.5 `AEADCipher` contract notes
    and stated bounds (AAD re-init behavior, `CIPHER_AES_ECB` reported for CTR,
    8-arg init tag-size deviation).
 
@@ -31,7 +31,7 @@ upstream `ph4r05/jcardsim`.
 <dependency>
     <groupId>works.relux</groupId>
     <artifactId>jcardsim</artifactId>
-    <version>3.0.5.9-relux.1</version>
+    <version>3.0.5.9-relux.2</version>
 </dependency>
 ```
 
@@ -52,7 +52,7 @@ mvn -q -DskipTests install
 ```
 
 `mvn -q -DskipTests install` produces
-`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.1/jcardsim-3.0.5.9-relux.1.jar`.
+`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.2/jcardsim-3.0.5.9-relux.2.jar`.
 
 ### Congratulations! jCardSim has won [Duke's Choice 2013 Award](https://www.java.net/dukeschoice/2013)!
 

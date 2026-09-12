@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>works.relux</groupId>
-    <version>3.0.5.9-relux.1</version>
+    <version>3.0.5.9-relux.2</version>
     <packaging>jar</packaging>
     <url>http://maven.apache.org</url>
 
@@ -309,6 +309,7 @@
                 <configuration>
                     <keepDependenciesWithProvidedScope>false</keepDependenciesWithProvidedScope>
                     <minimizeJar>true</minimizeJar>
+                    <createDependencyReducedPom>false</createDependencyReducedPom>
                     <relocations>
                         <relocation>
                             <pattern>org.bouncycastle</pattern>
