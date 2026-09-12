@@ -15,10 +15,12 @@
  */
 package com.licel.jcardsim.crypto;
 
+import java.math.BigInteger;
 import javacard.security.CryptoException;
 import javacard.security.ECPrivateKey;
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
+import org.bouncycastle.util.BigIntegers;
 
 /**
  * Implementation <code>ECPrivateKey</code> based
@@ -54,7 +56,28 @@ public class ECPrivateKeyImpl extends ECKeyImpl implements ECPrivateKey {
     }
   
      public void setParameters(CipherParameters params){
-        s.setBigInteger(((ECPrivateKeyParameters)params).getD());
+        // Always write the scalar with the fixed field length. ByteContainer
+        // allocates its backing array on the first write and never grows it,
+        // so a variable-length encoding (BigInteger.toByteArray trimmed of
+        // its sign byte) would overflow when a short scalar is followed by
+        // a full-length one (KeyPair.genKeyPair() reuses the key object).
+        BigInteger d = ((ECPrivateKeyParameters) params).getD();
+        s.setBytes(asUnsignedByteArray((short) ((size + 7) / 8), d));
+    }
+
+    /**
+     * Big-endian unsigned encoding of <code>value</code> left-padded to
+     * exactly <code>length</code> bytes (BigIntegers.asUnsignedByteArray(int, BigInteger)
+     * is not available in the bundled BouncyCastle 1.46).
+     */
+    static byte[] asUnsignedByteArray(short length, BigInteger value) {
+        byte[] raw = BigIntegers.asUnsignedByteArray(value);
+        if (raw.length > length) {
+            throw new IllegalArgumentException("value does not fit in " + length + " bytes");
+        }
+        byte[] out = new byte[length];
+        System.arraycopy(raw, 0, out, length - raw.length, raw.length);
+        return out;
     }
 
     public void setS(byte[] buffer, short offset, short length) throws CryptoException {
