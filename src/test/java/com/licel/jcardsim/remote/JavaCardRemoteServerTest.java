@@ -31,7 +31,7 @@ public class JavaCardRemoteServerTest extends TestCase {
 
         assertEquals(true, client.selectApplet(aid));
         // test NOP
-        byte[] response = client.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00});
+        byte[] response = client.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00});
         assertEquals(Arrays.areEqual(new byte[]{(byte) 0x90, 0x00}, response), true);
         System.out.println("testServer ... done");
     }

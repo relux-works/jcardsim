@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>works.relux</groupId>
-    <version>3.0.5.9-relux.2</version>
+    <version>3.0.5.9-relux.3</version>
     <packaging>jar</packaging>
     <url>http://maven.apache.org</url>
 

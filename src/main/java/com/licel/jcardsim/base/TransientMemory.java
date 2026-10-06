@@ -17,7 +17,9 @@ package com.licel.jcardsim.base;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 import javacard.framework.JCSystem;
 import javacard.framework.SystemException;
@@ -30,6 +32,24 @@ public class TransientMemory {
     protected final ArrayList<Object> clearOnDeselect = new ArrayList<Object>();
     /** List of <code>CLEAR_ON_RESET</code> arrays */
     protected final ArrayList<Object> clearOnReset = new ArrayList<Object>();
+    /** owner (applet AID or install marker) of each <code>CLEAR_ON_DESELECT</code> array, by identity */
+    protected final Map<Object, Object> deselectOwners = new IdentityHashMap<Object, Object>();
+    /** supplies the owner of newly allocated arrays; null means unknown owner */
+    protected OwnerResolver ownerResolver;
+
+    /** Supplies the context that owns a transient array at allocation time. */
+    public interface OwnerResolver {
+        /** @return current owner (applet AID or install marker), or null */
+        Object currentOwner();
+    }
+
+    /**
+     * Set the owner resolver used to attribute <code>CLEAR_ON_DESELECT</code> arrays.
+     * @param resolver resolver or null
+     */
+    public void setOwnerResolver(OwnerResolver resolver) {
+        this.ownerResolver = resolver;
+    }
 
     /**
      * @see javacard.framework.JCSystem#makeTransientBooleanArray(short, byte)
@@ -102,6 +122,10 @@ public class TransientMemory {
         switch (event) {
             case JCSystem.CLEAR_ON_DESELECT:
                 clearOnDeselect.add(arrayRef);
+                Object owner = ownerResolver == null ? null : ownerResolver.currentOwner();
+                if (owner != null) {
+                    deselectOwners.put(arrayRef, owner);
+                }
                 break;
             case JCSystem.CLEAR_ON_RESET:
                 clearOnReset.add(arrayRef);
@@ -116,6 +140,35 @@ public class TransientMemory {
      */
     protected void clearOnDeselect() {
         zero(clearOnDeselect);
+    }
+
+    /**
+     * Zero the <code>CLEAR_ON_DESELECT</code> buffers owned by <code>owner</code>, plus
+     * those with no recorded owner (allocated outside any applet context).
+     * @param owner owner, normally the deselected applet AID
+     */
+    protected void clearOnDeselect(Object owner) {
+        ArrayList<Object> selected = new ArrayList<Object>();
+        for (Object obj : clearOnDeselect) {
+            Object arrayOwner = deselectOwners.get(obj);
+            if (arrayOwner == null || arrayOwner == owner || (owner != null && owner.equals(arrayOwner))) {
+                selected.add(obj);
+            }
+        }
+        zero(selected);
+    }
+
+    /**
+     * Move every array owned by <code>from</code> to <code>to</code>.
+     * @param from previous owner (install marker)
+     * @param to new owner (installed applet AID)
+     */
+    protected void reassignOwner(Object from, Object to) {
+        for (Map.Entry<Object, Object> e : deselectOwners.entrySet()) {
+            if (e.getValue() == from) {
+                e.setValue(to);
+            }
+        }
     }
 
     /**
@@ -134,6 +187,7 @@ public class TransientMemory {
         clearOnReset();
         clearOnDeselect.clear();
         clearOnReset.clear();
+        deselectOwners.clear();
     }
 
     /**

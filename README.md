@@ -3,9 +3,9 @@ jCardSim (Official repo of the [jCardSim](http://jcardsim.org) project)
 
 ## relux-works fork
 
-This repository publishes `works.relux:jcardsim:3.0.5.9-relux.2`, a fork of
+This repository publishes `works.relux:jcardsim:3.0.5.9-relux.3`, a fork of
 [ph4r05/jcardsim](https://github.com/ph4r05/jcardsim) 3.0.5.9
-(base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with two
+(base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with the following
 patches on top:
 
 1. **externalAccess parity for MessageDigest/Cipher factories.** `MessageDigestProxy`
@@ -22,7 +22,14 @@ patches on top:
    and stated bounds (AAD re-init behavior, `CIPHER_AES_ECB` reported for CTR,
    8-arg init tag-size deviation).
 
-A PR carrying only these two patches (no coordinate change) is open/planned against
+3. **Fixed-width EC private scalars.** Repeated key generation no longer sizes the
+   reusable scalar buffer from a short first scalar (relux.2).
+4. **Logical-channel APDU routing.** MANAGE CHANNEL opens/closes channels 1..19;
+   SELECT and applet state belong to each channel. Both ISO CLA encodings are
+   decoded, the applet sees the original CLA, and APDU.getCLAChannel() reports it.
+   See `RELEASE-NOTES-3.0.5.9-relux.3.md` for the tested scope and simulator bounds.
+
+A PR carrying only the first two patches (no coordinate change) is open/planned against
 upstream `ph4r05/jcardsim`.
 
 ### Consumer coordinate
@@ -31,7 +38,7 @@ upstream `ph4r05/jcardsim`.
 <dependency>
     <groupId>works.relux</groupId>
     <artifactId>jcardsim</artifactId>
-    <version>3.0.5.9-relux.2</version>
+    <version>3.0.5.9-relux.3</version>
 </dependency>
 ```
 
@@ -52,7 +59,30 @@ mvn -q -DskipTests install
 ```
 
 `mvn -q -DskipTests install` produces
-`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.2/jcardsim-3.0.5.9-relux.2.jar`.
+`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.3/jcardsim-3.0.5.9-relux.3.jar`.
+
+### Tools and verification
+
+Use JDK 17 and a Java Card 3.0.5u4 kit for the runtime build. Maven tests use
+Java/JUnit; Python 3 only stages optional consumer integration inputs and runs
+standalone Java/Maven processes. Keep one host JVM build/test lane at a time.
+
+| Tool | Purpose and command | Outputs |
+| --- | --- | --- |
+| Maven | `mvn -q test`; `mvn -q -DskipTests install` | `target/`, local Maven repository |
+| Python 3 / Maven | `python3 scripts/logical-channel-mutants.py` | `.temp/logical-channel-mutants/` logs and `results.json` |
+| Python 3 / javac / JUnit 5 | `python3 scripts/bsimid-channel-integration.py --bsimid-root /path/to/bsimId --bridge-jar /path/to/jcrpc-bridge-0.3.2.jar` | `.temp/bsimid-channel-integration/` sources, input digests, compile/test logs |
+| Git | `git diff --check`; `git verify-commit HEAD`; `git verify-tag v3.0.5.9-relux.3` | Terminal; redirect local evidence into `.temp/` |
+
+The optional BSimID integration requires the consumer's pinned CAPs/classes
+already materialized in `jc/.deps`, and JUnit Jupiter 5.11.4 / Platform 1.11.4,
+OpenTest4J 1.3.0, API Guardian 1.1.2 in the local Maven repository. It compiles
+unchanged Auth and generated Java sources from the supplied consumer checkout,
+verifies that runtime payload classes match the pinned CAPs, and never edits or
+builds that checkout. The integration test is in `integration/bsimid/` so ordinary
+runtime tests have no product-specific dependencies. A narrowing control,
+`--narrow-foreign-a5`, modifies only the staged Auth source to admit foreign A5;
+the behavioral test must fail (exit 1), rather than count as a passing gate.
 
 ### Congratulations! jCardSim has won [Duke's Choice 2013 Award](https://www.java.net/dukeschoice/2013)!
 

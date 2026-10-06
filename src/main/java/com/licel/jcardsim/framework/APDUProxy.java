@@ -17,6 +17,7 @@ package com.licel.jcardsim.framework;
 
 import com.licel.jcardsim.base.ApduCase;
 import com.licel.jcardsim.base.SimulatorSystem;
+import com.licel.jcardsim.base.SimulatorRuntime;
 import com.licel.jcardsim.utils.ByteUtil;
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -716,6 +717,7 @@ public class APDUProxy {
 
         flags[ACCESS_ALLOWED_FLAG] = true;
         ramVars[ACTIVE_PROTOCOL] = protocol;
+        ramVars[LOGICAL_CHN] = SimulatorRuntime.getChannelFromCla(buffer[ISO7816.OFFSET_CLA]);
 
         final short lc;
         final short le;

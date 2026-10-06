@@ -17,3 +17,6 @@ nb-configuration.xml
 # task-board (local board state, agent scratch)
 .task-board/
 .temp/
+
+# Python verification scratch
+__pycache__/

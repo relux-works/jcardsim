@@ -151,7 +151,7 @@ public class SimulatorTest extends TestCase {
         assertEquals(instance.installApplet(TEST_APPLET1_AID, TEST_APPLET1_CLASSNAME, appletJarContents, createData, (short)0, (byte) createData.length).equals(TEST_APPLET1_AID),true);
         assertEquals(instance.selectApplet(TEST_APPLET1_AID), true);
         // test NOP
-        byte[] response = instance.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00});
+        byte[] response = instance.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00});
         assertEquals(Arrays.areEqual(new byte[]{(byte)0x90, 0x00}, response), true);
     }
 
@@ -160,13 +160,13 @@ public class SimulatorTest extends TestCase {
         instance.installApplet(TEST_APPLET_AID, TEST_APPLET_CLASS);
         instance.selectApplet(TEST_APPLET_AID);
         // test NOP with Lc=1
-        byte[] response1 = instance.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00, 0, 0, 1, 0xA});
+        byte[] response1 = instance.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00, 0, 0, 1, 0xA});
         assertEquals(ISO7816.SW_WRONG_LENGTH, Util.getShort(response1, (short) 0));
         // test NOP with Le=1
-        byte[] response2 = instance.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00, 0, 0, 1});
+        byte[] response2 = instance.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00, 0, 0, 1});
         assertEquals(ISO7816.SW_WRONG_LENGTH, Util.getShort(response2, (short) 0));
         // test NOP with Lc=1, Le=1
-        byte[] response3 = instance.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00, 0, 0, 1, 0xA, 0, 1});
+        byte[] response3 = instance.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00, 0, 0, 1, 0xA, 0, 1});
         assertEquals(ISO7816.SW_WRONG_LENGTH, Util.getShort(response3, (short) 0));
     }
 
@@ -201,7 +201,7 @@ public class SimulatorTest extends TestCase {
         instance.installApplet(TEST_APPLET_AID, TEST_APPLET_CLASS);
         assertEquals(instance.selectApplet(TEST_APPLET_AID), true);
         // test NOP
-        byte[] response = instance.transmitCommand(new byte[]{0x01, 0x02, 0x00, 0x00});
+        byte[] response = instance.transmitCommand(new byte[]{0x00, 0x02, 0x00, 0x00});
         assertEquals(Arrays.areEqual(new byte[]{(byte)0x90, 0x00}, response), true);
     }
 

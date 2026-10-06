@@ -73,6 +73,19 @@ public class SimulatorRuntime {
     /** previousActiveObject */
     protected Object previousActiveObject;
 
+    /** number of logical channels supported (basic channel 0 plus 1..19), ISO 7816-4 maximum */
+    public static final byte MAX_LOGICAL_CHANNELS = 20;
+    /** MANAGE CHANNEL instruction byte */
+    public static final byte INS_MANAGE_CHANNEL = (byte) 0x70;
+    /** applet selected on each logical channel, null when none */
+    protected final AID[] channelAIDs = new AID[MAX_LOGICAL_CHANNELS];
+    /** open state of each logical channel; the basic channel is always open */
+    protected final boolean[] channelOpen = new boolean[MAX_LOGICAL_CHANNELS];
+    /** logical channel of the command being processed */
+    protected byte currentChannel = 0;
+    /** marker that owns transient arrays allocated while an applet is being installed */
+    protected Object installContext;
+
     public SimulatorRuntime() {
         this(new TransientMemory());
     }
@@ -107,6 +120,12 @@ public class SimulatorRuntime {
         } catch (Exception e) {
             throw new RuntimeException("Internal reflection error", e);
         }
+        channelOpen[0] = true;
+        transientMemory.setOwnerResolver(new TransientMemory.OwnerResolver() {
+            public Object currentOwner() {
+                return installContext != null ? installContext : currentAID;
+            }
+        });
     }
 
     /**
@@ -217,14 +236,17 @@ public class SimulatorRuntime {
             throw new SystemException(SystemException.ILLEGAL_AID);
         }
 
-        applets.remove(aid);
         Applet applet = applicationInstance.getApplet();
+        if (applet != null) {
+            for (byte ch = 0; ch < MAX_LOGICAL_CHANNELS; ch++) {
+                if (channelAIDs[ch] != null && channelAIDs[ch].equals(aid)) {
+                    deselectOnChannel(ch);
+                }
+            }
+        }
+        applets.remove(aid);
         if (applet == null) {
             return;
-        }
-
-        if (getApplet(currentAID) == applet) {
-            deselect(applicationInstance);
         }
 
         if (applet instanceof AppletEvent) {
@@ -258,16 +280,43 @@ public class SimulatorRuntime {
         final byte[] theSW = new byte[2];
         byte[] response;
 
+        final byte cla = command[ISO7816.OFFSET_CLA];
+        if (cla == (byte) 0xFF) {
+            // ISO 7816-4: CLA 'FF' is invalid
+            Util.setShort(theSW, (short) 0, ISO7816.SW_CLA_NOT_SUPPORTED);
+            return theSW;
+        }
+        final byte channel = getChannelFromCla(cla);
+        if (!channelOpen[channel]) {
+            Util.setShort(theSW, (short) 0, ISO7816.SW_LOGICAL_CHANNEL_NOT_SUPPORTED);
+            return theSW;
+        }
+        currentChannel = channel;
+        currentAID = channelAIDs[channel];
+
+        if (isManageChannelApdu(command)) {
+            return manageChannel(command, apduCase, channel);
+        }
+
         Applet applet = getApplet(getAID());
+        boolean alreadyActive = false;
 
         selecting = false;
         // check if there is an applet to be selected
         if (!apduCase.isExtended() && isAppletSelectionApdu(command)) {
             AID newAid = findAppletForSelectApdu(command, apduCase);
             if (newAid != null) {
-                deselect(lookupApplet(getAID()));
+                alreadyActive = isActiveOnOtherChannel(newAid, channel);
+                Applet newApplet = getApplet(newAid);
+                if (alreadyActive && !(newApplet instanceof MultiSelectable)) {
+                    // JCRE: a non-multiselectable applet active on another channel cannot be selected
+                    Util.setShort(theSW, (short) 0, ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+                    return theSW;
+                }
+                deselectOnChannel(channel);
+                channelAIDs[channel] = newAid;
                 currentAID = newAid;
-                applet = getApplet(getAID());
+                applet = newApplet;
                 selecting = true;
             }
             else if (applet == null) {
@@ -300,12 +349,19 @@ public class SimulatorRuntime {
             if (selecting) {
                 boolean success;
                 try {
-                    success = applet.select();
+                    if (alreadyActive) {
+                        success = ((MultiSelectable) applet).select(true);
+                    } else {
+                        success = applet.select();
+                    }
                 }
                 catch (Exception e) {
                     success = false;
                 }
                 if (!success) {
+                    // a failed selection leaves no applet selected on this channel
+                    channelAIDs[channel] = null;
+                    currentAID = null;
                     throw new ISOException(ISO7816.SW_APPLET_SELECT_FAILED);
                 }
             }
@@ -363,12 +419,20 @@ public class SimulatorRuntime {
         return null;
     }
 
+    /**
+     * Deselect the applet active on the current logical channel.
+     * @param applicationInstance ignored except for compatibility; the applet on the current channel is deselected
+     */
     protected void deselect(ApplicationInstance applicationInstance) {
         activateSimulatorRuntimeInstance();
+        if (applicationInstance != null && channelAIDs[currentChannel] != null
+                && lookupApplet(channelAIDs[currentChannel]) == applicationInstance) {
+            deselectOnChannel(currentChannel);
+            return;
+        }
         if (applicationInstance != null) {
             try {
-                Applet applet = applicationInstance.getApplet();
-                applet.deselect();
+                applicationInstance.getApplet().deselect();
             } catch (Exception e) {
                 // ignore all
             }
@@ -377,6 +441,209 @@ public class SimulatorRuntime {
             abortTransaction();
         }
         transientMemory.clearOnDeselect();
+    }
+
+    /**
+     * Deselect the applet selected on a logical channel, if any. The applet's
+     * CLEAR_ON_DESELECT transient arrays are cleared only when it is no longer
+     * active on any other channel; a MultiSelectable applet still active elsewhere
+     * receives <code>deselect(true)</code>.
+     * @param channel logical channel number
+     */
+    protected void deselectOnChannel(byte channel) {
+        activateSimulatorRuntimeInstance();
+        AID aid = channelAIDs[channel];
+        if (aid == null) {
+            return;
+        }
+        final AID savedAID = currentAID;
+        final byte savedChannel = currentChannel;
+        final boolean stillActive = isActiveOnOtherChannel(aid, channel);
+        ApplicationInstance instance = lookupApplet(aid);
+        currentAID = aid;
+        currentChannel = channel;
+        try {
+            if (instance != null && instance.getApplet() != null) {
+                Applet applet = instance.getApplet();
+                if (stillActive && applet instanceof MultiSelectable) {
+                    ((MultiSelectable) applet).deselect(true);
+                } else {
+                    applet.deselect();
+                }
+            }
+        } catch (Exception e) {
+            // ignore all
+        } finally {
+            currentAID = savedAID;
+            currentChannel = savedChannel;
+        }
+        if (getTransactionDepth() != 0) {
+            abortTransaction();
+        }
+        if (!stillActive) {
+            transientMemory.clearOnDeselect(aid);
+        }
+        channelAIDs[channel] = null;
+        if (currentChannel == channel) {
+            currentAID = null;
+        }
+    }
+
+    /**
+     * @param aid applet AID
+     * @param exceptChannel channel to ignore
+     * @return true if the applet is selected on an open channel other than <code>exceptChannel</code>
+     */
+    protected boolean isActiveOnOtherChannel(AID aid, byte exceptChannel) {
+        for (byte ch = 0; ch < MAX_LOGICAL_CHANNELS; ch++) {
+            if (ch != exceptChannel && channelOpen[ch] && channelAIDs[ch] != null && channelAIDs[ch].equals(aid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @see javacard.framework.JCSystem#isAppletActive(AID)
+     * @param aid applet AID
+     * @return true if the applet is selected on any open logical channel
+     */
+    public boolean isAppletActive(AID aid) {
+        if (aid == null) {
+            return false;
+        }
+        for (byte ch = 0; ch < MAX_LOGICAL_CHANNELS; ch++) {
+            if (channelOpen[ch] && channelAIDs[ch] != null && channelAIDs[ch].equals(aid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param channel logical channel number
+     * @return true if the channel is open
+     */
+    public boolean isChannelOpen(byte channel) {
+        return channel >= 0 && channel < MAX_LOGICAL_CHANNELS && channelOpen[channel];
+    }
+
+    /**
+     * @param channel logical channel number
+     * @return AID of the applet selected on the channel, or null
+     */
+    public AID getSelectedAID(byte channel) {
+        if (!isChannelOpen(channel)) {
+            return null;
+        }
+        return channelAIDs[channel];
+    }
+
+    /**
+     * Decode the logical channel number from a CLA byte (ISO 7816-4 section 5.4.1,
+     * Java Card Runtime Environment Specification section 4.3). The proprietary class
+     * (b8 = 1) uses the same channel coding as the interindustry class.
+     * <ul>
+     * <li>b7 = 0 (first interindustry class and its proprietary analogue): channel = b2b1, 0..3</li>
+     * <li>b7 = 1 (further interindustry class and its proprietary analogue): channel = 4 + b4..b1, 4..19</li>
+     * </ul>
+     * @param cla CLA byte
+     * @return logical channel number 0..19
+     */
+    public static byte getChannelFromCla(byte cla) {
+        if ((cla & 0x40) == 0x40) {
+            return (byte) ((cla & 0x0F) + 4);
+        }
+        return (byte) (cla & 0x03);
+    }
+
+    /**
+     * @param command command APDU
+     * @return true for an interindustry-class MANAGE CHANNEL command
+     */
+    protected static boolean isManageChannelApdu(byte[] command) {
+        return (command[ISO7816.OFFSET_CLA] & 0x80) == 0 && command[ISO7816.OFFSET_INS] == INS_MANAGE_CHANNEL;
+    }
+
+    /**
+     * MANAGE CHANNEL (ISO 7816-4 section 11.1.2). P1 = '00' opens a channel: P2 = '00'
+     * lets the card assign the lowest free channel and return it in one data byte,
+     * P2 = 1..19 opens that channel. P1 = '80' closes the channel in P2 (or, with
+     * P2 = '00', the channel coded in CLA). The basic channel cannot be closed.
+     * A newly opened channel has no applet selected (this simulator has no default applet).
+     */
+    protected byte[] manageChannel(byte[] command, ApduCase apduCase, byte origin) {
+        final byte cla = command[ISO7816.OFFSET_CLA];
+        final byte p1 = command[ISO7816.OFFSET_P1];
+        final byte p2 = command[ISO7816.OFFSET_P2];
+        final boolean further = (cla & 0x40) == 0x40;
+        final boolean secureMessaging = further ? (cla & 0x20) != 0 : (cla & 0x0C) != 0;
+        final boolean chaining = (cla & 0x10) != 0;
+        if (secureMessaging) {
+            return sw(ISO7816.SW_SECURE_MESSAGING_NOT_SUPPORTED);
+        }
+        if (chaining) {
+            return sw(ISO7816.SW_COMMAND_CHAINING_NOT_SUPPORTED);
+        }
+        if (apduCase.isExtended() || apduCase == ApduCase.Case3 || apduCase == ApduCase.Case4) {
+            return sw(ISO7816.SW_WRONG_LENGTH);
+        }
+        if (p1 == 0x00) {
+            if (p2 == 0x00) {
+                if (apduCase != ApduCase.Case2) {
+                    return sw(ISO7816.SW_WRONG_LENGTH);
+                }
+                for (byte ch = 1; ch < MAX_LOGICAL_CHANNELS; ch++) {
+                    if (!channelOpen[ch]) {
+                        openChannel(ch);
+                        return new byte[]{ch, (byte) 0x90, 0x00};
+                    }
+                }
+                return sw(ISO7816.SW_FUNC_NOT_SUPPORTED);
+            }
+            if (apduCase != ApduCase.Case1) {
+                return sw(ISO7816.SW_WRONG_LENGTH);
+            }
+            if (p2 < 1 || p2 >= MAX_LOGICAL_CHANNELS || channelOpen[p2]) {
+                return sw(ISO7816.SW_INCORRECT_P1P2);
+            }
+            openChannel(p2);
+            return sw((short) 0x9000);
+        }
+        if (p1 == (byte) 0x80) {
+            if (apduCase != ApduCase.Case1) {
+                return sw(ISO7816.SW_WRONG_LENGTH);
+            }
+            final byte target = p2 == 0 ? origin : p2;
+            if (target == 0) {
+                // the basic channel cannot be closed
+                return sw(ISO7816.SW_FUNC_NOT_SUPPORTED);
+            }
+            if (target < 0 || target >= MAX_LOGICAL_CHANNELS) {
+                return sw(ISO7816.SW_INCORRECT_P1P2);
+            }
+            if (!channelOpen[target]) {
+                return sw(ISO7816.SW_LOGICAL_CHANNEL_NOT_SUPPORTED);
+            }
+            deselectOnChannel(target);
+            channelOpen[target] = false;
+            channelAIDs[target] = null;
+            currentChannel = origin;
+            currentAID = channelAIDs[origin];
+            return sw((short) 0x9000);
+        }
+        return sw(ISO7816.SW_INCORRECT_P1P2);
+    }
+
+    protected void openChannel(byte channel) {
+        channelOpen[channel] = true;
+        channelAIDs[channel] = null;
+    }
+
+    private static byte[] sw(short sw) {
+        byte[] r = new byte[2];
+        Util.setShort(r, (short) 0, sw);
+        return r;
     }
 
     /**
@@ -398,7 +665,16 @@ public class SimulatorRuntime {
         responseBufferSize = 0;
         currentAID = null;
         previousAID = null;
+        resetChannels();
         transientMemory.clearOnReset();
+    }
+
+    /** close every logical channel except the basic one and clear all selections */
+    protected void resetChannels() {
+        Arrays.fill(channelAIDs, null);
+        Arrays.fill(channelOpen, false);
+        channelOpen[0] = true;
+        currentChannel = 0;
     }
 
     public void resetRuntime() {
@@ -420,6 +696,7 @@ public class SimulatorRuntime {
         responseBufferSize = 0;
         currentAID = null;
         previousAID = null;
+        resetChannels();
         transientMemory.clearOnReset();
         transientMemory.forgetBuffers();
     }
@@ -452,7 +729,7 @@ public class SimulatorRuntime {
     }
 
     public byte getAssignedChannel() {
-        return 0; // basic channel
+        return currentChannel;
     }
 
     /**
@@ -589,15 +866,17 @@ public class SimulatorRuntime {
     }
 
     protected static boolean isAppletSelectionApdu(byte[] apdu) {
-        final byte channelMask = (byte) 0xFC; // mask out %b000000xx
         final byte p2Mask = (byte) 0xE3; // mask out %b000xxx00
 
-        final byte cla = (byte) (apdu[ISO7816.OFFSET_CLA] & channelMask);
+        final byte rawCla = apdu[ISO7816.OFFSET_CLA];
+        // first interindustry class without SM/chaining: %b000000xx (channels 0..3);
+        // further interindustry class without SM/chaining: %b0100xxxx (channels 4..19)
+        final boolean interindustryPlain = (rawCla & 0xFC) == 0x00 || (rawCla & 0xF0) == 0x40;
         final byte ins = apdu[ISO7816.OFFSET_INS];
         final byte p1 = apdu[ISO7816.OFFSET_P1];
         final byte p2 = (byte) (apdu[ISO7816.OFFSET_P2] & p2Mask);
 
-        return cla == ISO7816.CLA_ISO7816 && ins == ISO7816.INS_SELECT &&
+        return interindustryPlain && ins == ISO7816.INS_SELECT &&
                 p1 == 4 && p2 == 0;
     }
 
@@ -649,6 +928,17 @@ public class SimulatorRuntime {
             }
         });
 
+        final Object context = new Object();
+        final AID[] registered = new AID[1];
+        final BiConsumer<Applet,AID> registration = registrationCallback.get();
+        registrationCallback.set(new BiConsumer<Applet,AID>() {
+            public void accept(Applet applet, AID installAID) {
+                registration.accept(applet, installAID);
+                registered[0] = installAID != null ? installAID : appletAID;
+            }
+        });
+        final Object savedInstallContext = installContext;
+        installContext = context;
         try {
             initMethod.invoke(null, bArray, bOffset, bLength);
         }
@@ -665,6 +955,10 @@ public class SimulatorRuntime {
         }
         finally {
             registrationCallback.set(null);
+            installContext = savedInstallContext;
+            if (registered[0] != null) {
+                transientMemory.reassignOwner(context, registered[0]);
+            }
         }
 
         if (callCount.get() != 1) {
