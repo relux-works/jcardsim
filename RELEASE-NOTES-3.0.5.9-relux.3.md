@@ -66,9 +66,14 @@ Java/Maven processes, keeping the consumer checkout read-only.
 | basic-close-00 | admits basic-channel close only for CLA 00 | `testManageChannelRejectsInvalidTargetsWithoutChangingState` | Killed; Maven exit 1 |
 | close-target-20 | aliases invalid close target 20 to valid target 1; range gate remains | `testManageChannelRejectsInvalidTargetsWithoutChangingState` | Killed; Maven exit 1 |
 | open-p1-01 | admits open P1 01 only; all other invalid P1 remain refused | `testManageChannelRejectsInvalidTargetsWithoutChangingState` | Killed; Maven exit 1 |
+| issuer-b5 (staged actual Auth) | admits only B5 56 without an issuer session | `channelRefusalsPreserveKeysAndIssuerOnlyCreation` | Killed; JUnit / harness exit 1 |
 | foreign-a5 (staged actual Auth) | admits only foreign CLA A5 in process() | `realAuthAcceptsB4B5B7OnlyOnSelectedOpenChannels`, `channelRefusalsPreserveKeysAndIssuerOnlyCreation` | Killed; JUnit / harness exit 1 |
 
-14 of 14 runtime controls and the foreign-A5 integration control are killed by
+The issuer-B5 staged control admits only B5 56 without a GP service, leaving
+all other issuer frames gated. `channelRefusalsPreserveKeysAndIssuerOnlyCreation`
+must fail with expected 6982 versus the unauthorized success.
+
+14 of 14 runtime controls and both integration controls are killed by
 named assertion failures. No final control survives. The first data-case-only
 control survived (Maven exit 0): a second Case1 length check still refused it.
 The shipped data-open-1 control weakens both checks only for a Case3 open of
@@ -112,6 +117,7 @@ Verified on JDK 17.0.18 / Maven 3.9.14:
 - Actual Auth integration: compile exit 0, JUnit exit 0, 3 tests, no skips.
 - Runtime mutants: 14 named narrowing controls, each Maven exit 1 with its named assertion failure.
 - Staged Auth foreign-A5 control: compile exit 0, JUnit exit 1 with two named assertion failures.
+- Staged Auth issuer-B5 control: compile exit 0, JUnit exit 1; the named test expected 6982 and observed 9000.
 
 Two clean builds and the installed local Maven artifact have identical SHA-256:
 `84a5a2f27dbdd82724a40c34bb0b1a2c35ad73ab887f6b6c55b2d75f9c712d21`.

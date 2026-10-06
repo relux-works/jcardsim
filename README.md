@@ -83,6 +83,8 @@ builds that checkout. The integration test is in `integration/bsimid/` so ordina
 runtime tests have no product-specific dependencies. A narrowing control,
 `--narrow-foreign-a5`, modifies only the staged Auth source to admit foreign A5;
 the behavioral test must fail (exit 1), rather than count as a passing gate.
+`--narrow-issuer-b5` admits only B5 56 without an issuer session in the staged
+source; the key-creation admission test must likewise fail.
 
 ### Congratulations! jCardSim has won [Duke's Choice 2013 Award](https://www.java.net/dukeschoice/2013)!
 

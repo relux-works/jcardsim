@@ -31,7 +31,9 @@ def main():
     p.add_argument('--bridge-jar', type=Path, required=True)
     p.add_argument('--junit-home', type=Path, default=Path.home()/'.m2/repository')
     p.add_argument('--output', type=Path, default=ROOT/'.temp/bsimid-channel-integration')
-    p.add_argument('--narrow-foreign-a5', action='store_true', help='control: admit only foreign CLA A5 in actual Auth process()')
+    controls=p.add_mutually_exclusive_group()
+    controls.add_argument('--narrow-foreign-a5', action='store_true', help='control: admit only foreign CLA A5 in actual Auth process()')
+    controls.add_argument('--narrow-issuer-b5', action='store_true', help='control: admit only B5 56 without an issuer session')
     args = p.parse_args()
     out = args.output.resolve(); out.mkdir(parents=True, exist_ok=True)
     consumer = args.bsimid_root.resolve(); jc = consumer/'jc'
@@ -79,13 +81,20 @@ def main():
         if text.count(before)!=1:
             raise RuntimeError('foreign-class control was not applied uniquely')
         applet.write_text(text.replace(before, 'if (!isAuthClass(buffer[ISO7816.OFFSET_CLA]) && buffer[ISO7816.OFFSET_CLA] != (byte) 0xA5) {'))
+    if args.narrow_issuer_b5:
+        applet = out/'inputs/jc/applets/auth/src/main/java/ru/mts/bsimid/applet/auth/BSimAuthApplet.java'
+        text=applet.read_text()
+        before='private short requireIssuerSession(byte[] buffer, short length) {\n        SecureChannel channel = GPSystem.getSecureChannel();\n        if (channel == null) {'
+        if text.count(before)!=1:
+            raise RuntimeError('issuer control was not applied uniquely')
+        applet.write_text(text.replace(before, before+'\n            if (buffer[ISO7816.OFFSET_CLA] == (byte) 0xB5 && buffer[ISO7816.OFFSET_INS] == 0x56) return length;'))
     sources += sorted((ROOT/'integration/bsimid').glob('*.java'))
     cp=os.pathsep.join(str(j) for j in jars)
     classes=out/'classes'; classes.mkdir(exist_ok=True)
     java_home=Path(os.environ['JAVA_HOME'])
     identity={'bsimidCommit': subprocess.check_output(['git','-C',str(consumer),'rev-parse','HEAD'],text=True).strip(),
               'jcCommit': subprocess.check_output(['git','-C',str(jc),'rev-parse','HEAD'],text=True).strip(),
-              'mutation': 'foreign-a5' if args.narrow_foreign_a5 else None,
+              'mutation': 'foreign-a5' if args.narrow_foreign_a5 else ('issuer-b5' if args.narrow_issuer_b5 else None),
               'inputs':inputs,'jars':[{'name':j.name,'sha256':sha(j)} for j in jars]}
     (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
     commands=[([str(java_home/'bin/javac'),'--release','17','-cp',cp,'-d',str(classes)]+[str(s) for s in sources],'compile.log'),
