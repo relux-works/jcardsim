@@ -3,7 +3,7 @@ jCardSim (Official repo of the [jCardSim](http://jcardsim.org) project)
 
 ## relux-works fork
 
-This repository publishes `works.relux:jcardsim:3.0.5.9-relux.3`, a fork of
+This repository publishes `works.relux:jcardsim:3.0.5.9-relux.4`, a fork of
 [ph4r05/jcardsim](https://github.com/ph4r05/jcardsim) 3.0.5.9
 (base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with the following
 patches on top:
@@ -19,8 +19,8 @@ patches on top:
    over BC's `GCMBlockCipher`) and `AESCTRCipherImpl` (AES-CTR, over BC's
    `AESEngine` with an explicit 128-bit counter), wired into `CipherProxy`. See
    `RELEASE-NOTES-3.0.5.9-relux.2.md` for the JC 3.0.5 `AEADCipher` contract notes
-   and stated bounds (AAD re-init behavior, `CIPHER_AES_ECB` reported for CTR,
-   8-arg init tag-size deviation).
+   and stated bounds (AAD re-init behavior and `CIPHER_AES_ECB` reported for CTR).
+   The former eight-argument GCM init deviation is retired in relux.4.
 
 3. **Fixed-width EC private scalars.** Repeated key generation no longer sizes the
    reusable scalar buffer from a short first scalar (relux.2).
@@ -28,6 +28,10 @@ patches on top:
    SELECT and applet state belong to each channel. Both ISO CLA encodings are
    decoded, the applet sees the original CLA, and APDU.getCLAChannel() reports it.
    See `RELEASE-NOTES-3.0.5.9-relux.3.md` for the tested scope and simulator bounds.
+5. **Online GCM initialization conformance.** Two- and five-argument GCM init
+   retain their documented behavior; the offline-only eight-argument init rejects
+   GCM with `CryptoException.INVALID_INIT`. See
+   `RELEASE-NOTES-3.0.5.9-relux.4.md` for the regression and recovery scope.
 
 A PR carrying only the first two patches (no coordinate change) is open/planned against
 upstream `ph4r05/jcardsim`.
@@ -38,7 +42,7 @@ upstream `ph4r05/jcardsim`.
 <dependency>
     <groupId>works.relux</groupId>
     <artifactId>jcardsim</artifactId>
-    <version>3.0.5.9-relux.3</version>
+    <version>3.0.5.9-relux.4</version>
 </dependency>
 ```
 
@@ -59,7 +63,7 @@ mvn -q -DskipTests install
 ```
 
 `mvn -q -DskipTests install` produces
-`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.3/jcardsim-3.0.5.9-relux.3.jar`.
+`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.4/jcardsim-3.0.5.9-relux.4.jar`.
 
 ### Tools and verification
 
@@ -72,7 +76,7 @@ standalone Java/Maven processes. Keep one host JVM build/test lane at a time.
 | Maven | `mvn -q test`; `mvn -q -DskipTests install` | `target/`, local Maven repository |
 | Python 3 / Maven | `python3 scripts/logical-channel-mutants.py` | `.temp/logical-channel-mutants/` logs and `results.json` |
 | Python 3 / javac / JUnit 5 | `python3 scripts/bsimid-channel-integration.py --bsimid-root /path/to/bsimId --bridge-jar /path/to/jcrpc-bridge-0.3.2.jar` | `.temp/bsimid-channel-integration/` sources, input digests, compile/test logs |
-| Git | `git diff --check`; `git verify-commit HEAD`; `git verify-tag v3.0.5.9-relux.3` | Terminal; redirect local evidence into `.temp/` |
+| Git | `git diff --check`; `git verify-commit HEAD`; `git verify-tag v3.0.5.9-relux.4` | Terminal; redirect local evidence into `.temp/` |
 
 The optional BSimID integration requires the consumer's pinned CAPs/classes
 already materialized in `jc/.deps`, and JUnit Jupiter 5.11.4 / Platform 1.11.4,

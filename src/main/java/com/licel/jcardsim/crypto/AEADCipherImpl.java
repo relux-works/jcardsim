@@ -45,8 +45,8 @@ import org.bouncycastle.util.Arrays;
  * </ul>
  * The nonce is supplied through <code>init(Key, mode, bArray, ...)</code>
  * (12 bytes); <code>init(Key, mode)</code> uses an all-zero 12-byte IV as the
- * API documents. The offline-style 8-argument init is accepted as well, which
- * is the only way to select a tag size other than 16.
+ * API documents. The offline-style 8-argument initializer rejects GCM with
+ * <code>INVALID_INIT</code>; online GCM uses a 16-byte generated tag.
  * @see AEADCipher
  */
 public class AEADCipherImpl extends AEADCipher {
@@ -79,26 +79,27 @@ public class AEADCipherImpl extends AEADCipher {
 
     public void init(Key theKey, byte theMode) throws CryptoException {
         // API: "AEADCipher in GCM mode will use 0 for initial vector (IV)"
-        init(theKey, theMode, new byte[DEFAULT_NONCE_LENGTH], (short) 0, DEFAULT_NONCE_LENGTH,
-                (short) 0, (short) 0, DEFAULT_TAG_LENGTH);
+        initGcm(theKey, theMode, new byte[DEFAULT_NONCE_LENGTH], (short) 0, DEFAULT_NONCE_LENGTH);
     }
 
     public void init(Key theKey, byte theMode, byte[] bArray, short bOff, short bLen) throws CryptoException {
-        if (bLen != DEFAULT_NONCE_LENGTH) {
-            CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
-        }
-        init(theKey, theMode, bArray, bOff, bLen, (short) 0, (short) 0, DEFAULT_TAG_LENGTH);
+        initGcm(theKey, theMode, bArray, bOff, bLen);
     }
 
     public void init(Key theKey, byte theMode, byte[] nonceBuf, short nonceOff, short nonceLen, short adataLen, short messageLen, short tagSize) throws CryptoException {
         isInitialized = false;
+        CryptoException.throwIt(CryptoException.INVALID_INIT);
+    }
+
+    private void initGcm(Key theKey, byte theMode, byte[] nonceBuf, short nonceOff, short nonceLen) throws CryptoException {
+        isInitialized = false;
         if (theMode != MODE_ENCRYPT && theMode != MODE_DECRYPT) {
             CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
         }
-        if (nonceLen < 1 || adataLen < 0 || messageLen < 0 || !isSupportedTagLength(tagSize)) {
+        if (nonceLen != DEFAULT_NONCE_LENGTH) {
             CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
         }
-        tagLength = tagSize;
+        tagLength = DEFAULT_TAG_LENGTH;
         keyParameter = selectKey(theKey);
         nonce = new byte[nonceLen];
         Util.arrayCopyNonAtomic(nonceBuf, nonceOff, nonce, (short) 0, nonceLen);

@@ -72,17 +72,17 @@ public class AESGCMCTRCipherTest extends TestCase {
         assertGcmVector(KeyBuilder.LENGTH_AES_256, GCM_KEY_256, GCM_CT_256, GCM_TAG_256);
     }
 
-    // Proves: the AEAD init (explicit nonce/adataLen/messageLen/tagSize) and a
+    // Proves: the online init (explicit 12-byte nonce) and a
     // chunked update/doFinal sequence produce the same NIST TC4 ciphertext and
     // tag as the one-shot form (streaming does not change keystream or tag),
     // and the output buffer sized exactly to the plaintext is enough.
-    public void testGcmAeadInitStreamingMatchesVector() {
+    public void testGcmOnlineInitStreamingMatchesVector() {
         byte[] pt = Hex.decode(GCM_PT);
         byte[] aad = Hex.decode(GCM_AAD);
         byte[] iv = Hex.decode(GCM_IV);
         AEADCipher gcm = (AEADCipher) Cipher.getInstance(AEADCipher.ALG_AES_GCM, false);
         gcm.init(aesKey(KeyBuilder.LENGTH_AES_128, GCM_KEY_128), Cipher.MODE_ENCRYPT,
-                iv, (short) 0, (short) iv.length, (short) aad.length, (short) pt.length, (short) 16);
+                iv, (short) 0, (short) iv.length);
         gcm.updateAAD(aad, (short) 0, (short) 7);
         gcm.updateAAD(aad, (short) 7, (short) (aad.length - 7));
         byte[] out = new byte[pt.length];
@@ -231,14 +231,12 @@ public class AESGCMCTRCipherTest extends TestCase {
     // Proves: verifyTag before doFinal and in encrypt mode -> ILLEGAL_USE;
     // retrieveTag before doFinal and in decrypt mode -> ILLEGAL_USE; an
     // unsupported tag length on either (17, 3, or != the configured size for
-    // retrieveTag) -> ILLEGAL_VALUE; a 12-byte tag configured via the AEAD init
-    // is retrieved as the leading 12 bytes of the TC4 tag.
+    // retrieveTag) -> ILLEGAL_VALUE. Online GCM uses a 16-byte generated tag.
     public void testGcmVerifyAndRetrieveTagState() {
         final byte[] ct = Hex.decode(GCM_CT_128);
         final byte[] tag = Hex.decode(GCM_TAG_128);
         final byte[] aad = Hex.decode(GCM_AAD);
         final byte[] iv = Hex.decode(GCM_IV);
-        final byte[] pt = Hex.decode(GCM_PT);
         final AEADCipher gcm = (AEADCipher) Cipher.getInstance(AEADCipher.ALG_AES_GCM, false);
         gcm.init(aesKey(KeyBuilder.LENGTH_AES_128, GCM_KEY_128), Cipher.MODE_DECRYPT, iv, (short) 0, (short) iv.length);
         gcm.updateAAD(aad, (short) 0, (short) aad.length);
@@ -274,22 +272,44 @@ public class AESGCMCTRCipherTest extends TestCase {
             public void run() { gcm.retrieveTag(out, (short) 0, (short) 12); }
         });
 
-        gcm.init(aesKey(KeyBuilder.LENGTH_AES_128, GCM_KEY_128), Cipher.MODE_ENCRYPT,
-                iv, (short) 0, (short) iv.length, (short) aad.length, (short) pt.length, (short) 12);
+    }
+
+    // Proves: both GCM modes reject the offline-only initializer with exactly
+    // INVALID_INIT, leave no usable previous operation, and recover through
+    // legal explicit-nonce initialization. NIST vectors ground the valid path.
+    public void testGcmOfflineInitRejectedAndOnlineInitRecovers() {
+        final byte[] iv = Hex.decode(GCM_IV);
+        final byte[] aad = Hex.decode(GCM_AAD);
+        final byte[] pt = Hex.decode(GCM_PT);
+        final SymmetricKeyImpl key = aesKey(KeyBuilder.LENGTH_AES_128, GCM_KEY_128);
+        final AEADCipher gcm = (AEADCipher) Cipher.getInstance(AEADCipher.ALG_AES_GCM, false);
+        final byte[] out = new byte[pt.length];
+        final byte[] modes = { Cipher.MODE_ENCRYPT, Cipher.MODE_DECRYPT };
+        for (int i = 0; i < modes.length; i++) {
+            final byte mode = modes[i];
+            gcm.init(key, mode, iv, (short) 0, (short) iv.length);
+            assertReason(CryptoException.INVALID_INIT, new Runnable() {
+                public void run() {
+                    gcm.init(key, mode, iv, (short) 0, (short) iv.length,
+                            (short) aad.length, (short) pt.length, (short) 16);
+                }
+            });
+            assertReason(CryptoException.INVALID_INIT, new Runnable() {
+                public void run() { gcm.doFinal(pt, (short) 0, (short) 0, out, (short) 0); }
+            });
+        }
+        assertGcmVector(KeyBuilder.LENGTH_AES_128, GCM_KEY_128, GCM_CT_128, GCM_TAG_128);
+        gcm.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length);
         gcm.updateAAD(aad, (short) 0, (short) aad.length);
-        gcm.doFinal(pt, (short) 0, (short) pt.length, out, (short) 0);
-        byte[] short12 = new byte[12];
-        assertEquals(12, gcm.retrieveTag(short12, (short) 0, (short) 12));
-        assertEquals(GCM_TAG_128.substring(0, 24), hex(short12));
-        assertReason(CryptoException.ILLEGAL_VALUE, new Runnable() {
-            public void run() { gcm.retrieveTag(out, (short) 0, (short) 16); }
-        });
+        assertEquals(pt.length, gcm.doFinal(pt, (short) 0, (short) pt.length, out, (short) 0));
+        assertEquals(GCM_CT_128, hex(out));
     }
 
     // Proves: a DES key (wrong key type/size for AES-GCM) is refused with
     // ILLEGAL_VALUE; an AES key object with no key material is UNINITIALIZED_KEY;
     // a non-12-byte IV on the plain init is ILLEGAL_VALUE; an unsupported tag
-    // size on the AEAD init is ILLEGAL_VALUE; init(Key, mode) uses a zero IV
+    // undefined mode is ILLEGAL_VALUE; failed reinit invalidates the old
+    // operation; init(Key, mode) uses a zero IV
     // (same ciphertext as an explicit 12 zero bytes).
     public void testGcmInitNegativeRows() {
         final byte[] iv = Hex.decode(GCM_IV);
@@ -304,11 +324,16 @@ public class AESGCMCTRCipherTest extends TestCase {
             public void run() { gcm.init(empty, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length); }
         });
         final SymmetricKeyImpl key = aesKey(KeyBuilder.LENGTH_AES_128, GCM_KEY_128);
+        gcm.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length);
         assertReason(CryptoException.ILLEGAL_VALUE, new Runnable() {
             public void run() { gcm.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) 11); }
         });
+        assertReason(CryptoException.INVALID_INIT, new Runnable() {
+            public void run() { gcm.doFinal(iv, (short) 0, (short) 0, iv, (short) 0); }
+        });
+        gcm.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length);
         assertReason(CryptoException.ILLEGAL_VALUE, new Runnable() {
-            public void run() { gcm.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length, (short) 0, (short) 0, (short) 3); }
+            public void run() { gcm.init(key, (byte) 0, iv, (short) 0, (short) iv.length); }
         });
         // every failed init leaves the engine unusable
         assertReason(CryptoException.INVALID_INIT, new Runnable() {

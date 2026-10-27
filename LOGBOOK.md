@@ -70,3 +70,11 @@
 - FIX: gate removed in `src/main/java/com/licel/jcardsim/crypto/MessageDigestProxy.java` and `CipherProxy.java`; flag is now a no-op like the other factories (simulator has no CLEAR_ON_DESELECT distinction for engine buffers).
 - FINDING: `javacard.security.*` / `javacardx.crypto.*` sources do not exist in the repo; the build injects `*Proxy` classes into the Oracle api_classic classes, so bytecode verification must be done with `javap` on the built jar.
 - SCOPE: `ExternalAccessFactoryParityTest` pins parity for all four factories plus unknown-algorithm negative row. TASK-260912-2ehtym.
+
+# 2026-10-27: online GCM initializer contract
+
+- Corrected the offline-only eight-argument GCM initializer to raise INVALID_INIT.
+- Kept legal online initialization in a private helper and invalidated failed reinitializations.
+- Replaced the previous offline-init positive fixture with online streaming vectors and a rejection/recovery regression.
+- The regression fails on the previous implementation; the corrected complete Maven suite passes 184 tests with no failures, errors or skips.
+- Prepared the relux.4 coordinate; publishing and consumer adoption are separate from source/test completion.
