@@ -3,7 +3,7 @@ jCardSim (Official repo of the [jCardSim](http://jcardsim.org) project)
 
 ## relux-works fork
 
-This repository publishes `works.relux:jcardsim:3.0.5.9-relux.4`, a fork of
+This repository publishes `works.relux:jcardsim:3.0.5.9-relux.5`, a fork of
 [ph4r05/jcardsim](https://github.com/ph4r05/jcardsim) 3.0.5.9
 (base commit [8414703](https://github.com/ph4r05/jcardsim/commit/8414703)) with the following
 patches on top:
@@ -33,6 +33,9 @@ patches on top:
    GCM with `CryptoException.INVALID_INIT`. See
    `RELEASE-NOTES-3.0.5.9-relux.4.md` for the regression and recovery scope.
 
+The elliptic-curve point validation changes are described in
+`RELEASE-NOTES-3.0.5.9-relux.5.md`.
+
 A PR carrying only the first two patches (no coordinate change) is open/planned against
 upstream `ph4r05/jcardsim`.
 
@@ -42,7 +45,7 @@ upstream `ph4r05/jcardsim`.
 <dependency>
     <groupId>works.relux</groupId>
     <artifactId>jcardsim</artifactId>
-    <version>3.0.5.9-relux.4</version>
+    <version>3.0.5.9-relux.5</version>
 </dependency>
 ```
 
@@ -63,7 +66,7 @@ mvn -q -DskipTests install
 ```
 
 `mvn -q -DskipTests install` produces
-`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.4/jcardsim-3.0.5.9-relux.4.jar`.
+`~/.m2/repository/works/relux/jcardsim/3.0.5.9-relux.5/jcardsim-3.0.5.9-relux.5.jar`.
 
 ### Tools and verification
 
@@ -76,7 +79,7 @@ standalone Java/Maven processes. Keep one host JVM build/test lane at a time.
 | Maven | `mvn -q test`; `mvn -q -DskipTests install` | `target/`, local Maven repository |
 | Python 3 / Maven | `python3 scripts/logical-channel-mutants.py` | `.temp/logical-channel-mutants/` logs and `results.json` |
 | Python 3 / javac / JUnit 5 | `python3 scripts/bsimid-channel-integration.py --bsimid-root /path/to/bsimId --bridge-jar /path/to/jcrpc-bridge-0.3.2.jar` | `.temp/bsimid-channel-integration/` sources, input digests, compile/test logs |
-| Git | `git diff --check`; `git verify-commit HEAD`; `git verify-tag v3.0.5.9-relux.4` | Terminal; redirect local evidence into `.temp/` |
+| Git | `git diff --check`; `git verify-commit HEAD`; `git verify-tag v3.0.5.9-relux.5` | Terminal; redirect local evidence into `.temp/` |
 
 The optional BSimID integration requires the consumer's pinned CAPs/classes
 already materialized in `jc/.deps`, and JUnit Jupiter 5.11.4 / Platform 1.11.4,
