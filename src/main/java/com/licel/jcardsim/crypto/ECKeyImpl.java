@@ -29,6 +29,9 @@ import org.bouncycastle.crypto.params.ECDomainParameters;
 import org.bouncycastle.crypto.params.ECKeyGenerationParameters;
 import org.bouncycastle.crypto.params.ECKeyParameters;
 import org.bouncycastle.math.ec.ECCurve;
+import org.bouncycastle.math.ec.ECFieldElement;
+import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
 /**
  * Base class for
@@ -284,5 +287,32 @@ public abstract class ECKeyImpl extends KeyImpl implements ECKey {
     }
     public void copyDomainParametersFrom(ECKey eckey) throws CryptoException {
         throw new UnsupportedOperationException("Not supported yet.");
+    }
+    static ECPublicKeyParameters decodePublicPoint(byte[] encoding, ECDomainParameters domain) {
+        ECCurve curve = domain.getCurve();
+        ECPoint point;
+        try {
+            point = curve.decodePoint(encoding);
+        } catch (IllegalArgumentException invalid) {
+            CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
+            return null;
+        }
+        if (point.isInfinity()) {
+            CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
+        }
+        ECFieldElement x = point.getX();
+        ECFieldElement y = point.getY();
+        ECFieldElement left = y.square();
+        ECFieldElement right;
+        if (curve instanceof ECCurve.F2m) {
+            left = left.add(x.multiply(y));
+            right = x.square().multiply(x.add(curve.getA())).add(curve.getB());
+        } else {
+            right = x.square().add(curve.getA()).multiply(x).add(curve.getB());
+        }
+        if (!left.equals(right)) {
+            CryptoException.throwIt(CryptoException.ILLEGAL_VALUE);
+        }
+        return new ECPublicKeyParameters(point, domain);
     }
 }

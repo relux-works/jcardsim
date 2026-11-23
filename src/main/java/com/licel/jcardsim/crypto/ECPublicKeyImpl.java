@@ -86,6 +86,6 @@ public class ECPublicKeyImpl extends ECKeyImpl implements ECPublicKey {
             CryptoException.throwIt(CryptoException.UNINITIALIZED_KEY);
         }
         ECDomainParameters dp = getDomainParameters();
-        return new ECPublicKeyParameters(dp.getCurve().decodePoint(w.getBytes(JCSystem.CLEAR_ON_RESET)), dp);
+        return decodePublicPoint(w.getBytes(JCSystem.CLEAR_ON_RESET), dp);
     }
 }

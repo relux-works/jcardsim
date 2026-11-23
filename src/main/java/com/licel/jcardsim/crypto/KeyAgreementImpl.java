@@ -107,8 +107,8 @@ public class KeyAgreementImpl extends KeyAgreement {
         } else {
             byte[] publicKey = new byte[publicLength];
             Util.arrayCopyNonAtomic(publicData, publicOffset, publicKey, (short) 0, publicLength);
-            ECPublicKeyParameters ecp = new ECPublicKeyParameters(
-                    ((ECPrivateKeyParameters) ((ECPrivateKeyImpl) privateKey).getParameters()).getParameters().getCurve().decodePoint(publicKey), ((ECPrivateKeyParameters) ((ECPrivateKeyImpl) privateKey).getParameters()).getParameters());
+            ECPublicKeyParameters ecp = ECKeyImpl.decodePublicPoint(publicKey,
+                    ((ECPrivateKeyImpl) privateKey).getDomainParameters());
             byte[] num = engine.calculateAgreement(ecp).toByteArray();
 
             byte[] result;
